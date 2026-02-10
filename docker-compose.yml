@@ -1,0 +1,40 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: db
+    environment:
+      POSTGRES_DB: sensor_db
+      POSTGRES_USER: sensor
+      POSTGRES_PASSWORD: sensor
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: mqtt
+    ports:
+      - "1883:1883"
+
+  nuxt:
+    build:
+      context: ./nuxt-app
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      - db
+      - mqtt
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - nuxt
