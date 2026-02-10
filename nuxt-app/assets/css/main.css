@@ -49,3 +49,15 @@
     @apply bg-slate-700/50 rounded-lg p-4;
   }
 }
+@layer utilities {
+  .slide-enter-active,
+  .slide-leave-active {
+    transition: all 0.3s ease;
+  }
+
+  .slide-enter-from,
+  .slide-leave-to {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}

@@ -3,12 +3,63 @@
     <!-- Header -->
     <div class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
       <div class="max-w-6xl mx-auto px-6 py-6">
-        <NuxtLink to="/" class="inline-flex items-center text-blue-400 hover:text-blue-300 mb-4 transition">
-          <span class="mr-2">←</span> Back to Dashboard
-        </NuxtLink>
+        <div class="flex justify-between items-start mb-4">
+          <NuxtLink to="/" class="inline-flex items-center text-blue-400 hover:text-blue-300 transition">
+            <span class="mr-2">←</span> Back to Dashboard
+          </NuxtLink>
+          <div class="flex gap-2">
+            <button 
+              @click="showExportMenu = !showExportMenu"
+              class="btn-secondary text-sm px-4 py-2 flex items-center gap-2"
+            >
+              📥 Export
+            </button>
+            <button 
+              @click="settingsModalOpen = true"
+              class="btn-primary text-sm px-4 py-2 flex items-center gap-2"
+            >
+              ⚙️ Settings
+            </button>
+          </div>
+        </div>
         <h1 class="text-4xl font-bold text-white">{{ sensor?.sensor_code || 'Loading...' }}</h1>
         <p class="text-slate-400 mt-1">{{ sensor?.sensor_type }}</p>
       </div>
+
+      <!-- Export Menu -->
+      <Transition name="slide">
+        <div v-if="showExportMenu" class="bg-slate-800 border-t border-slate-700">
+          <div class="max-w-6xl mx-auto px-6 py-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="text-xs text-slate-400 uppercase tracking-wide block mb-2">Date Range</label>
+                <select v-model="exportFilters.range" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm">
+                  <option value="1h">Last 1 Hour</option>
+                  <option value="6h">Last 6 Hours</option>
+                  <option value="24h">Last 24 Hours</option>
+                  <option value="7d">Last 7 Days</option>
+                </select>
+              </div>
+              <div class="flex items-end gap-2">
+                <button 
+                  @click="exportData('csv')"
+                  :disabled="exporting"
+                  class="btn-primary text-sm flex-1 disabled:opacity-50"
+                >
+                  {{ exporting ? '⏳ ...' : '📄 CSV' }}
+                </button>
+                <button 
+                  @click="exportData('excel')"
+                  :disabled="exporting"
+                  class="btn-primary text-sm flex-1 disabled:opacity-50"
+                >
+                  {{ exporting ? '⏳ ...' : '📊 Excel' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
 
     <!-- Main Content -->
@@ -160,13 +211,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Settings Modal -->
+    <SettingsModal 
+      :isOpen="settingsModalOpen"
+      :sensorId="sensor?.id"
+      :initialData="sensor?.spec"
+      @close="settingsModalOpen = false"
+      @saved="handleSettingsSaved"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const route = useRoute()
+const settingsModalOpen = ref(false)
+const showExportMenu = ref(false)
+const exporting = ref(false)
+const exportFilters = ref({ range: '7d' })
 
 interface SensorData {
   id: number | string
@@ -258,5 +322,56 @@ const isCalibrationDue = (date: string | undefined | null): boolean => {
   } catch {
     return false
   }
+}
+
+const exportData = async (format: 'csv' | 'excel') => {
+  try {
+    exporting.value = true
+    const params = new URLSearchParams({
+      sensor_id: String(sensor.value?.id),
+      range: exportFilters.value.range,
+      format
+    })
+    
+    const response = await fetch(`/api/export?${params}`)
+    if (!response.ok) throw new Error('Export failed')
+    
+    if (format === 'csv') {
+      // Handle CSV as plain text
+      const csv = await response.text()
+      const blob = new Blob([csv], { type: 'text/csv' })
+      downloadFile(blob, `${sensor.value?.sensor_code}_${new Date().toISOString().slice(0, 10)}.csv`)
+    } else if (format === 'excel') {
+      // Handle Excel with xlsx library
+      const jsonData = await response.json()
+      const XLSX = await import('xlsx')
+      const ws = XLSX.utils.json_to_sheet(jsonData.data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Measurements')
+      XLSX.writeFile(wb, `${sensor.value?.sensor_code}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    }
+    
+    showExportMenu.value = false
+  } catch (error) {
+    console.error('Export error:', error)
+    alert('Failed to export data')
+  } finally {
+    exporting.value = false
+  }
+}
+
+const downloadFile = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  window.URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+}
+
+const handleSettingsSaved = () => {
+  refresh()
 }
 </script>
