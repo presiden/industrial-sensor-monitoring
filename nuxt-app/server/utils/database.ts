@@ -21,7 +21,11 @@ export const useDatabase = () => {
     query: async (text: string, values?: any[]) => {
       try {
         const res = await pool!.query(text, values)
-        return res.rows
+        return {
+          rows: res.rows,
+          rowCount: res.rowCount,
+          command: res.command
+        }
       } catch (error) {
         console.error('Database query error:', error, { text, values })
         throw error
